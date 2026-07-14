@@ -28,9 +28,11 @@ Local **Materials Project** phase-scout toolkit: GUI + CLI + optional agent skil
 When the user pastes an alloy/composition, call the CLI (do not improvise raw mp-api one-offs):
 
 ```powershell
-cd "D:\Backup\桌面\PhaseScout"
+cd "E:\Vibe_coding\PhaseScout"
 python scripts\fetch_possible_phases.py "<composition>" --mode possible_phases --label <Label> --yes
 ```
+
+（其他机器：在仓库根目录执行即可，不必使用本机绝对路径。）
 
 Prefer `--dry-run` first for large systems (4+ elements). Never echo API keys.
 
