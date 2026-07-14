@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "phasescout"
+version = "0.1.0"
+description = "Scout possible phases and harvest CIFs from the Materials Project (GUI + CLI)."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "D-sudoasd" }]
+keywords = [
+  "materials-project",
+  "cif",
+  "crystallography",
+  "alloy",
+  "phase",
+  "mp-api",
+]
+dependencies = [
+  "mp-api>=0.43",
+]
+
+[project.urls]
+Homepage = "https://github.com/D-sudoasd/PhaseScout"
+Repository = "https://github.com/D-sudoasd/PhaseScout"
+
+[tool.setuptools]
+py-modules = ["app", "mp_client", "composition_parse"]
