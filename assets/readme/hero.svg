@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="340" viewBox="0 0 1200 340" role="img" aria-labelledby="title desc">
+  <title id="title">PhaseScout</title>
+  <desc id="desc">Scout possible phases from alloy composition and harvest CIF cards from the Materials Project, with optional Cij sidecars.</desc>
+  <rect width="1200" height="340" rx="28" fill="#0b1220"/>
+  <g font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+    <text x="56" y="72" fill="#a78bfa" font-size="18" font-weight="700" letter-spacing="2">MATERIALS PROJECT · PHASE SPACE</text>
+    <text x="56" y="130" fill="#f8fafc" font-size="48" font-weight="800">PhaseScout</text>
+    <text x="56" y="176" fill="#94a3b8" font-size="22">Scout possible phases. Harvest CIF cards.</text>
+    <text x="56" y="218" fill="#64748b" font-size="18">Composition → subsystems → CIF (+ optional Cij) → phase_index.csv</text>
+    <text x="56" y="270" fill="#fbbf24" font-size="16">DFT-relaxed structures · not automatic experimental CIFs</text>
+  </g>
+  <!-- graph of phases -->
+  <g transform="translate(700 50)">
+    <rect width="440" height="240" rx="16" fill="#111827" stroke="#312e81" stroke-width="2"/>
+    <circle cx="80" cy="80" r="28" fill="#1e1b4b" stroke="#a78bfa" stroke-width="2"/>
+    <text x="62" y="86" fill="#e9d5ff" font-family="ui-monospace, monospace" font-size="14">Ti</text>
+    <circle cx="200" cy="60" r="28" fill="#1e1b4b" stroke="#38bdf8" stroke-width="2"/>
+    <text x="178" y="66" fill="#bae6fd" font-family="ui-monospace, monospace" font-size="14">Al</text>
+    <circle cx="320" cy="90" r="28" fill="#1e1b4b" stroke="#a7f3d0" stroke-width="2"/>
+    <text x="304" y="96" fill="#bbf7d0" font-family="ui-monospace, monospace" font-size="14">V</text>
+    <circle cx="160" cy="160" r="34" fill="#172554" stroke="#fbbf24" stroke-width="2"/>
+    <text x="128" y="166" fill="#fde68a" font-family="ui-monospace, monospace" font-size="13">mp-####</text>
+    <circle cx="300" cy="180" r="34" fill="#172554" stroke="#f472b6" stroke-width="2"/>
+    <text x="270" y="186" fill="#fbcfe8" font-family="ui-monospace, monospace" font-size="13">.cif</text>
+    <line x1="105" y1="90" x2="140" y2="140" stroke="#475569" stroke-width="2"/>
+    <line x1="200" y1="88" x2="170" y2="130" stroke="#475569" stroke-width="2"/>
+    <line x1="300" y1="105" x2="280" y2="155" stroke="#475569" stroke-width="2"/>
+    <line x1="190" y1="175" x2="270" y2="180" stroke="#64748b" stroke-width="2"/>
+    <text x="40" y="228" fill="#64748b" font-family="ui-monospace, monospace" font-size="13">GUI · CLI · /mp-possible-phases skill</text>
+  </g>
+</svg>
