@@ -1,31 +1,38 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="340" viewBox="0 0 1200 340" role="img" aria-labelledby="title desc">
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="360" viewBox="0 0 1200 360" role="img" aria-labelledby="title desc">
   <title id="title">PhaseScout</title>
-  <desc id="desc">Scout possible phases from alloy composition and harvest CIF cards from the Materials Project, with optional Cij sidecars.</desc>
-  <rect width="1200" height="340" rx="28" fill="#0b1220"/>
-  <g font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
-    <text x="56" y="72" fill="#a78bfa" font-size="18" font-weight="700" letter-spacing="2">MATERIALS PROJECT · PHASE SPACE</text>
-    <text x="56" y="130" fill="#f8fafc" font-size="48" font-weight="800">PhaseScout</text>
-    <text x="56" y="176" fill="#94a3b8" font-size="22">Scout possible phases. Harvest CIF cards.</text>
-    <text x="56" y="218" fill="#64748b" font-size="18">Composition → subsystems → CIF (+ optional Cij) → phase_index.csv</text>
-    <text x="56" y="270" fill="#fbbf24" font-size="16">DFT-relaxed structures · not automatic experimental CIFs</text>
+  <desc id="desc">Scout possible phases from alloy composition and harvest CIF cards from the Materials Project.</desc>
+  <rect width="1200" height="360" rx="26" fill="#0A0B12"/>
+  <path d="M0 54H1200M700 0V360" stroke="#1C1E2A"/>
+  <g transform="translate(56 42)" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+    <text fill="#8B8FA8" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="13" letter-spacing="2.2">MATERIALS PROJECT · PHASE CANDIDATES</text>
+    <text y="100" fill="#F4F2EA" font-size="60" font-weight="760" letter-spacing="-2">PhaseScout</text>
+    <text y="148" fill="#B4B8C8" font-size="23">Scout possible phases. Harvest CIF cards.</text>
+    <path d="M0 176H480" stroke="#2A2E40"/>
+    <g transform="translate(0 210)" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="12">
+      <text fill="#F4F2EA">COMPOSITION</text>
+      <text x="140" fill="#7A7E96">SUBSYSTEMS</text>
+      <text x="268" fill="#7A7E96">CIF</text>
+      <text x="320" fill="#C4B5FD">Cij</text>
+    </g>
+    <text y="268" fill="#6A6E86" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="12">DFT-relaxed · not experimental CIFs by default</text>
   </g>
-  <!-- graph of phases -->
-  <g transform="translate(700 50)">
-    <rect width="440" height="240" rx="16" fill="#111827" stroke="#312e81" stroke-width="2"/>
-    <circle cx="80" cy="80" r="28" fill="#1e1b4b" stroke="#a78bfa" stroke-width="2"/>
-    <text x="62" y="86" fill="#e9d5ff" font-family="ui-monospace, monospace" font-size="14">Ti</text>
-    <circle cx="200" cy="60" r="28" fill="#1e1b4b" stroke="#38bdf8" stroke-width="2"/>
-    <text x="178" y="66" fill="#bae6fd" font-family="ui-monospace, monospace" font-size="14">Al</text>
-    <circle cx="320" cy="90" r="28" fill="#1e1b4b" stroke="#a7f3d0" stroke-width="2"/>
-    <text x="304" y="96" fill="#bbf7d0" font-family="ui-monospace, monospace" font-size="14">V</text>
-    <circle cx="160" cy="160" r="34" fill="#172554" stroke="#fbbf24" stroke-width="2"/>
-    <text x="128" y="166" fill="#fde68a" font-family="ui-monospace, monospace" font-size="13">mp-####</text>
-    <circle cx="300" cy="180" r="34" fill="#172554" stroke="#f472b6" stroke-width="2"/>
-    <text x="270" y="186" fill="#fbcfe8" font-family="ui-monospace, monospace" font-size="13">.cif</text>
-    <line x1="105" y1="90" x2="140" y2="140" stroke="#475569" stroke-width="2"/>
-    <line x1="200" y1="88" x2="170" y2="130" stroke="#475569" stroke-width="2"/>
-    <line x1="300" y1="105" x2="280" y2="155" stroke="#475569" stroke-width="2"/>
-    <line x1="190" y1="175" x2="270" y2="180" stroke="#64748b" stroke-width="2"/>
-    <text x="40" y="228" fill="#64748b" font-family="ui-monospace, monospace" font-size="13">GUI · CLI · /mp-possible-phases skill</text>
+  <!-- phase graph -->
+  <g transform="translate(740 48)" fill="none" stroke="#C8CBE0" stroke-width="1.4">
+    <rect width="400" height="264" fill="#10121C" stroke="#2A2E40"/>
+    <circle cx="90" cy="90" r="34" stroke="#9B8CFF"/>
+    <circle cx="210" cy="70" r="34" stroke="#6EC1FF"/>
+    <circle cx="310" cy="110" r="34" stroke="#8FE3B8"/>
+    <circle cx="160" cy="180" r="42" stroke="#E8C36A"/>
+    <circle cx="290" cy="200" r="38" stroke="#E8A0C0"/>
+    <path d="M120 100 L140 160 M200 100 L170 150 M290 130 L280 170 M200 185 L255 200" stroke="#3A4058" stroke-dasharray="4 5"/>
+    <g stroke="none" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="13">
+      <text x="78" y="95" fill="#C8C0FF">Ti</text>
+      <text x="196" y="75" fill="#A8D8FF">Al</text>
+      <text x="298" y="115" fill="#B8F0D0">V</text>
+      <text x="132" y="185" fill="#F0DCA0">mp-id</text>
+      <text x="272" y="205" fill="#F0C0D8">.cif</text>
+    </g>
+    <text x="24" y="248" fill="#5A5E78" stroke="none" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="11">GUI · CLI · scheme-B filenames · phase_index.csv</text>
   </g>
+  <text x="1144" y="336" text-anchor="end" fill="#4A4E66" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="12">D-sudoasd / PhaseScout</text>
 </svg>
