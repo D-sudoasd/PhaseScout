@@ -30,12 +30,15 @@ from composition_parse import (  # noqa: E402
     chemsys_subsystems,
     parse_composition_text,
 )
+from elasticity_web import ElasticityWebTarget, run_web_fallback  # noqa: E402
 from mp_client import (  # noqa: E402
+    CifNameMeta,
     MaterialsProjectService,
     PhaseCandidate,
     parse_mpids,
     sanitize_filename_part,
 )
+from structure_type import infer_structure_type_detailed  # noqa: E402
 
 
 def load_api_key(explicit: str | None = None) -> str:
@@ -231,6 +234,8 @@ def write_phase_index(
     fieldnames = [
         "material_id",
         "formula",
+        "structure_type",
+        "structure_type_rule",
         "queried_chemsys",
         "applies_to",
         "space_group",
@@ -241,6 +246,10 @@ def write_phase_index(
         "cif_filename",
         "download_status",
         "download_error",
+        "elasticity_status",
+        "elasticity_source",
+        "elasticity_nature",
+        "elasticity_json",
     ]
     with path.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
@@ -328,7 +337,17 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--elasticity",
         action="store_true",
-        help="Also export elasticity JSON/CSV for successful CIFs",
+        help="Also export MP elasticity JSON/CSV for successful CIFs",
+    )
+    parser.add_argument(
+        "--no-elasticity-web",
+        action="store_true",
+        help="With --elasticity: do not run internet/literature fallback for MP misses",
+    )
+    parser.add_argument(
+        "--elasticity-web-offline",
+        action="store_true",
+        help="With --elasticity: write web search pack only (no live OpenAlex calls)",
     )
     parser.add_argument(
         "--include-deprecated",
@@ -464,10 +483,15 @@ def main(argv: list[str] | None = None) -> int:
             applies = applies_to_for_elements(formula_elements(cand.formula), alloy_map)
             if not applies and alloy_map:
                 applies = ";".join(alloy_map.keys())
+            st = infer_structure_type_detailed(
+                cand.formula, cand.space_group, cand.space_group_number
+            )
             rows.append(
                 {
                     "material_id": cand.material_id,
                     "formula": cand.formula,
+                    "structure_type": st.type,
+                    "structure_type_rule": st.rule,
                     "queried_chemsys": cand.queried_chemsys,
                     "applies_to": applies,
                     "space_group": cand.space_group,
@@ -482,6 +506,10 @@ def main(argv: list[str] | None = None) -> int:
                     "cif_filename": "",
                     "download_status": "dry_run",
                     "download_error": "",
+                    "elasticity_status": "",
+                    "elasticity_source": "",
+                    "elasticity_nature": "",
+                    "elasticity_json": "",
                 }
             )
         write_phase_index(out_dir / "phase_index.csv", rows)
@@ -519,52 +547,83 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Dry-run OK → {out_dir / 'phase_index.csv'}")
         return 0
 
-    # Download
+    # Download (scheme B filenames: mp-id + formula + SG + e_hull [+ stable])
+    name_meta = {
+        c.material_id.lower(): CifNameMeta.from_phase_candidate(c) for c in candidates
+    }
     download_results = service.download_cifs(
         [c.material_id for c in candidates],
         out_dir,
         conventional_unit_cell=conventional,
         include_elasticity=args.elasticity,
+        name_meta=name_meta,
     )
     result_by_id = {r.material_id.lower(): r for r in download_results}
     cand_by_id = {c.material_id.lower(): c for c in candidates}
 
+    web_targets: list[ElasticityWebTarget] = []
     for mpid, cand in cand_by_id.items():
         res = result_by_id.get(mpid)
         applies = applies_to_for_elements(formula_elements(cand.formula), alloy_map)
         if not applies and alloy_map:
             applies = ";".join(alloy_map.keys())
+        el_status, el_source, el_nature, el_json = "", "", "", ""
         if res is None:
             fail_n += 1
             status, err, cif_name = "missing_result", "No download result", ""
         elif res.ok and res.path is not None:
             ok_n += 1
             status, err, cif_name = "ok", "", res.path.name
-            # refresh formula from successful path stem if needed
-            if not cand.formula and "_" in res.path.stem:
-                # mp-xxx_Formula
-                parts = res.path.stem.split("_", 1)
-                if len(parts) == 2:
-                    cand = PhaseCandidate(
-                        material_id=cand.material_id,
-                        formula=parts[1],
-                        energy_above_hull=cand.energy_above_hull,
-                        is_stable=cand.is_stable,
-                        theoretical=cand.theoretical,
-                        space_group=cand.space_group,
-                        space_group_number=cand.space_group_number,
-                        crystal_system=cand.crystal_system,
-                        deprecated=cand.deprecated,
-                        queried_chemsys=cand.queried_chemsys,
+            # Prefer structure formula from download when API summary formula was empty.
+            if not cand.formula and res.formula:
+                cand = PhaseCandidate(
+                    material_id=cand.material_id,
+                    formula=res.formula,
+                    energy_above_hull=cand.energy_above_hull,
+                    is_stable=cand.is_stable,
+                    theoretical=cand.theoretical,
+                    space_group=cand.space_group,
+                    space_group_number=cand.space_group_number,
+                    crystal_system=cand.crystal_system,
+                    deprecated=cand.deprecated,
+                    queried_chemsys=cand.queried_chemsys,
+                )
+            if args.elasticity:
+                el_status = res.elasticity_status or (
+                    "ok" if res.elasticity_found else "no_elasticity_data"
+                )
+                el_source = res.elasticity_source or (
+                    "materials_project" if res.elasticity_found is not None else ""
+                )
+                el_json = res.elasticity_path.name if res.elasticity_path else ""
+                if res.elasticity_found is True:
+                    el_nature = "DFT_calculated"
+                elif res.elasticity_found is False:
+                    el_nature = "missing"
+                    web_targets.append(
+                        ElasticityWebTarget(
+                            material_id=mpid,
+                            formula=cand.formula or res.formula,
+                            space_group=cand.space_group,
+                            space_group_number=cand.space_group_number,
+                            cif_filename=cif_name,
+                            mp_status=el_status,
+                            mp_error=res.elasticity_error or "",
+                        )
                     )
         else:
             fail_n += 1
             status, err, cif_name = "failed", (res.error if res else ""), ""
 
+        st = infer_structure_type_detailed(
+            cand.formula, cand.space_group, cand.space_group_number
+        )
         rows.append(
             {
                 "material_id": mpid,
                 "formula": cand.formula,
+                "structure_type": st.type,
+                "structure_type_rule": st.rule,
                 "queried_chemsys": cand.queried_chemsys,
                 "applies_to": applies,
                 "space_group": cand.space_group,
@@ -579,8 +638,35 @@ def main(argv: list[str] | None = None) -> int:
                 "cif_filename": cif_name,
                 "download_status": status,
                 "download_error": err,
+                "elasticity_status": el_status,
+                "elasticity_source": el_source,
+                "elasticity_nature": el_nature,
+                "elasticity_json": el_json,
             }
         )
+
+    web_summary: dict[str, object] = {}
+    if args.elasticity and web_targets and not args.no_elasticity_web:
+        live = not args.elasticity_web_offline
+        print(
+            f"MP Cij missing for {len(web_targets)} phase(s); "
+            f"running internet/literature fallback"
+            f"{' (offline pack only)' if not live else ''}…"
+        )
+        web_summary = run_web_fallback(
+            out_dir,
+            web_targets,
+            live_search=live,
+        )
+        # Mark rows that received web hints (still no verified numerical Cij).
+        missing_ids = {t.material_id.lower() for t in web_targets}
+        for row in rows:
+            mid = str(row.get("material_id", "")).lower()
+            if mid in missing_ids and row.get("elasticity_status") not in ("ok",):
+                row["elasticity_status"] = "web_hints"
+                row["elasticity_source"] = "web_literature"
+                row["elasticity_nature"] = "literature_hint_only"
+                # Keep elasticity_json pointing at MP sidecar (documents the miss).
 
     write_phase_index(out_dir / "phase_index.csv", rows)
     write_query_summary(
@@ -610,6 +696,11 @@ def main(argv: list[str] | None = None) -> int:
                 "subsystem_counts": subsystem_counts,
                 "out_dir": str(out_dir),
                 "elasticity": bool(args.elasticity),
+                "elasticity_web": bool(
+                    args.elasticity and web_targets and not args.no_elasticity_web
+                ),
+                "elasticity_web_missing": len(web_targets) if args.elasticity else 0,
+                "elasticity_web_summary": web_summary,
             },
             indent=2,
             ensure_ascii=False,
@@ -618,6 +709,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     print(f"Done: {ok_n} ok, {fail_n} failed → {out_dir}")
     print(f"Index: {out_dir / 'phase_index.csv'}")
+    if args.elasticity:
+        print(f"Elasticity index: {out_dir / 'elasticity_index.csv'}")
+        if web_summary.get("web_search_csv"):
+            print(f"Web search pack: {web_summary['web_search_csv']}")
+        if web_summary.get("web_hits_jsonl"):
+            print(f"Web literature hits: {web_summary['web_hits_jsonl']}")
     return 0 if fail_n == 0 else 2
 
 

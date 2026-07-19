@@ -10,7 +10,7 @@ from pathlib import Path
 from tkinter import BooleanVar, IntVar, StringVar, Text, Tk, filedialog, messagebox
 from tkinter import ttk
 
-from mp_client import MaterialsProjectService, MaterialSummary, parse_mpids
+from mp_client import CifNameMeta, MaterialsProjectService, MaterialSummary, parse_mpids
 
 
 APP_DIR = Path(__file__).resolve().parent
@@ -269,6 +269,7 @@ class PhaseScoutApp:
                 output_dir,
                 conventional_cell,
                 include_elasticity=include_elasticity,
+                name_meta=self._name_meta_for_mpids(mpids),
             )
             self.events.put(("download_results", results))
 
@@ -334,10 +335,25 @@ class PhaseScoutApp:
                 output_dir,
                 conventional_cell,
                 include_elasticity=include_elasticity,
+                name_meta=self._name_meta_for_mpids(mpids),
             )
             self.events.put(("download_results", results))
 
         self._run_worker(label, task)
+
+    def _name_meta_for_mpids(self, mpids: list[str]) -> dict[str, CifNameMeta]:
+        """Build CIF name metadata from current search rows when available."""
+
+        by_id = {
+            str(item.material_id).strip().lower(): item for item in self.search_results
+        }
+        meta: dict[str, CifNameMeta] = {}
+        for mpid in mpids:
+            key = str(mpid).strip().lower()
+            summary = by_id.get(key)
+            if summary is not None:
+                meta[key] = CifNameMeta.from_material_summary(summary)
+        return meta
 
     def _poll_events(self) -> None:
         while True:
@@ -409,6 +425,9 @@ class PhaseScoutApp:
             self._log(f"Cij 查询结束：获得 {elasticity_ok} 个，缺失/失败 {elasticity_missing} 个。")
             for directory in sorted(elasticity_dirs, key=str):
                 self._log(f"Cij 索引: {directory / 'elasticity_index.csv'}")
+                self._log(
+                    f"下游 CIF2Peaks：将文件夹拖入即可自动匹配 Cij → {directory}"
+                )
 
     def _set_busy(self, busy: bool, label: str) -> None:
         self.busy = busy

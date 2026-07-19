@@ -15,9 +15,25 @@ except Exception:  # pragma: no cover - used for a clear GUI error message
     MPRester = None  # type: ignore[assignment]
 
 
+from structure_type import (  # noqa: E402
+    StructureTypeResult,
+    infer_structure_type,
+    infer_structure_type_detailed,
+)
+
 MPID_RE = re.compile(r"^mp-\d+$", re.IGNORECASE)
 SAFE_NAME_RE = re.compile(r"[^A-Za-z0-9_.+-]+")
 ELASTICITY_SOURCE = "Materials Project materials/elasticity"
+ELASTICITY_METHODOLOGY_URL = (
+    "https://docs.materialsproject.org/methodology/materials-methodology/elasticity"
+)
+ELASTICITY_DISCLAIMER = (
+    "DFT elastic constants from Materials Project. Not experimental Cij. "
+    "Verify phase identity, cell setting, and orientation before continuum/FEM use."
+)
+ELASTICITY_DISCLAIMER_SHORT = "MP DFT Cij (not experimental); check orientation vs conventional CIF"
+PHASESCOUT_ELASTICITY_SCHEMA = "phasescout_elasticity_v1"
+CIF2PEAKS_COORDINATE_FRAME = "materials_project_ieee_conventional"
 ELASTICITY_FIELDS = [
     "material_id",
     "formula_pretty",
@@ -132,9 +148,12 @@ class DownloadResult:
     ok: bool
     path: Path | None = None
     error: str = ""
+    formula: str = ""
     elasticity_found: bool | None = None
     elasticity_path: Path | None = None
     elasticity_error: str = ""
+    elasticity_status: str = ""
+    elasticity_source: str = ""
 
 
 @dataclass(frozen=True)
@@ -154,6 +173,8 @@ class ElasticityArtifact:
     found: bool
     path: Path
     error: str = ""
+    status: str = ""
+    source: str = "materials_project"
 
 
 def parse_mpids(text: str) -> tuple[list[str], list[str]]:
@@ -183,7 +204,149 @@ def sanitize_filename_part(value: str, fallback: str) -> str:
 
     value = SAFE_NAME_RE.sub("_", value.strip())
     value = value.strip("._ ")
+    # Collapse repeated underscores from symbol sanitizing (e.g. P6_3/mmc → P6_3_mmc).
+    value = re.sub(r"_+", "_", value)
     return value or fallback
+
+
+def format_ehull_token(energy_above_hull: float) -> str:
+    """Filename token for E_hull (eV/atom), e.g. ehull0 / ehull0p010 / ehull1p983."""
+
+    if abs(float(energy_above_hull)) < 5e-7:
+        return "ehull0"
+    text = f"{float(energy_above_hull):.3f}"
+    text = text.replace("-", "m").replace(".", "p")
+    return f"ehull{text}"
+
+
+def parse_spacegroup_display(spacegroup: str) -> tuple[str, int | None]:
+    """Parse GUI-style 'Fm-3m (225)' or bare 'Fm-3m' into symbol + number."""
+
+    text = (spacegroup or "").strip()
+    if not text:
+        return "", None
+    match = re.match(r"^(.*?)\s*\((\d+)\)\s*$", text)
+    if match:
+        symbol = match.group(1).strip()
+        try:
+            return symbol, int(match.group(2))
+        except ValueError:
+            return symbol, None
+    return text, None
+
+
+@dataclass(frozen=True)
+class CifNameMeta:
+    """Optional metadata used to build human-distinguishable CIF filenames."""
+
+    formula: str = ""
+    space_group: str = ""
+    space_group_number: int | None = None
+    energy_above_hull: float | None = None
+    is_stable: bool | None = None
+    structure_type: str = ""
+    structure_type_rule: str = ""
+
+    @classmethod
+    def from_phase_candidate(cls, cand: PhaseCandidate) -> "CifNameMeta":
+        st = infer_structure_type_detailed(
+            cand.formula, cand.space_group, cand.space_group_number
+        )
+        return cls(
+            formula=cand.formula,
+            space_group=cand.space_group,
+            space_group_number=cand.space_group_number,
+            energy_above_hull=cand.energy_above_hull,
+            is_stable=cand.is_stable,
+            structure_type=st.type,
+            structure_type_rule=st.rule,
+        )
+
+    @classmethod
+    def from_material_summary(cls, summary: MaterialSummary) -> "CifNameMeta":
+        symbol, number = parse_spacegroup_display(summary.spacegroup)
+        st = infer_structure_type_detailed(summary.formula, symbol, number)
+        return cls(
+            formula=summary.formula,
+            space_group=symbol,
+            space_group_number=number,
+            energy_above_hull=summary.energy_above_hull,
+            is_stable=(
+                summary.energy_above_hull is not None
+                and abs(float(summary.energy_above_hull)) < 5e-7
+            ),
+            structure_type=st.type,
+            structure_type_rule=st.rule,
+        )
+
+
+def build_cif_filename(
+    material_id: str,
+    formula: str,
+    *,
+    space_group: str = "",
+    space_group_number: int | None = None,
+    energy_above_hull: float | None = None,
+    is_stable: bool | None = None,
+    structure_type: str = "",
+) -> str:
+    """Scheme B: mp-id first, then formula / structure type / SG / e_hull / stable.
+
+    Examples:
+      mp-134_Al_FCC_sg225_Fm-3m_ehull0_stable.cif
+      mp-54_Co_HCP_sg194_P6_3_mmc_ehull0p025.cif
+      mp-xxxx_Ni3Al_L12_sg221_Pm-3m_ehull0_stable.cif
+    """
+
+    mpid = str(material_id).strip().lower() or "mp-unknown"
+    formula_safe = sanitize_filename_part(formula, "structure")
+    parts = [mpid, formula_safe]
+
+    stype = (structure_type or "").strip()
+    if not stype:
+        stype = infer_structure_type(formula, space_group, space_group_number)
+    stype = sanitize_filename_part(stype, "") if stype else ""
+    if stype:
+        parts.append(stype)
+
+    if space_group_number is not None:
+        try:
+            parts.append(f"sg{int(space_group_number)}")
+        except (TypeError, ValueError):
+            pass
+
+    sg_symbol = sanitize_filename_part(space_group, "") if space_group else ""
+    if sg_symbol:
+        parts.append(sg_symbol)
+
+    if energy_above_hull is not None:
+        try:
+            parts.append(format_ehull_token(float(energy_above_hull)))
+        except (TypeError, ValueError):
+            pass
+
+    if is_stable is True:
+        parts.append("stable")
+
+    return "_".join(parts) + ".cif"
+
+
+def _spacegroup_from_structure(structure: object) -> tuple[str, int | None]:
+    """Best-effort SG from a pymatgen Structure when API meta is missing."""
+
+    try:
+        from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
+
+        sga = SpacegroupAnalyzer(structure, symprec=0.1)  # type: ignore[arg-type]
+        symbol = str(sga.get_space_group_symbol() or "")
+        number = sga.get_space_group_number()
+        try:
+            number_i = int(number) if number is not None else None
+        except (TypeError, ValueError):
+            number_i = None
+        return symbol, number_i
+    except Exception:
+        return "", None
 
 
 def _value(obj: object, name: str, default: Any = None) -> Any:
@@ -289,6 +452,64 @@ def _flatten_cij(matrix: list[list[float | str | None]] | None) -> dict[str, obj
     return values
 
 
+def _mp_material_url(material_id: str) -> str:
+    mid = str(material_id or "").strip().lower()
+    return f"https://next-gen.materialsproject.org/materials/{mid}"
+
+
+def _build_elasticity_provenance(
+    download: SuccessfulCif,
+    *,
+    status: str,
+    cij_basis: str,
+    fitting_method: object,
+    state: object,
+    numerical: bool,
+) -> dict[str, object]:
+    """Explicit provenance so Cij is never a black-box number."""
+
+    base: dict[str, object] = {
+        "provider": "Materials Project",
+        "api": "materials/elasticity",
+        "source_label": ELASTICITY_SOURCE,
+        "material_id": download.material_id,
+        "paired_cif": download.path.name,
+        "methodology_url": ELASTICITY_METHODOLOGY_URL,
+        "mp_material_url": _mp_material_url(download.material_id),
+        "status": status,
+        "numerical_cij": numerical,
+        "not_experimental": True,
+        "disclaimer": ELASTICITY_DISCLAIMER,
+    }
+    if numerical:
+        base.update(
+            {
+                "nature_of_data": "DFT_calculated",
+                "cij_basis": cij_basis,
+                "units": "GPa",
+                "orientation_note": (
+                    "IEEE elastic tensor is aligned with the Materials Project "
+                    "conventional standard cell; PhaseScout CIF export uses "
+                    "conventional_unit_cell=True by default."
+                ),
+                "fitting_method": fitting_method,
+                "state": state,
+            }
+        )
+    else:
+        base.update(
+            {
+                "nature_of_data": "none",
+                "fallback": (
+                    "No numerical Cij from MP. See elasticity_web_search.csv / "
+                    "elasticity_web_hits.jsonl for literature hints only — "
+                    "tensors are not auto-parsed from papers."
+                ),
+            }
+        )
+    return base
+
+
 def _build_elasticity_payload(
     download: SuccessfulCif,
     doc: object | None,
@@ -298,15 +519,21 @@ def _build_elasticity_payload(
     raw = _tensor_matrix(doc, "raw") if doc is not None else None
     ieee_format = _tensor_matrix(doc, "ieee_format") if doc is not None else None
     formula = _clean_text(_value(doc, "formula_pretty")) if doc is not None else ""
+    cij_basis = "ieee_format" if ieee_format else ("raw" if raw else "")
+    numerical = status == "ok" and bool(cij_basis)
+    fitting_method = _json_scalar(_value(doc, "fitting_method")) if doc is not None else None
+    state = _json_scalar(_value(doc, "state")) if doc is not None else None
+    stiffness = ieee_format or raw
 
-    return {
+    payload: dict[str, object] = {
+        "schema": PHASESCOUT_ELASTICITY_SCHEMA,
         "material_id": download.material_id,
         "formula": formula or download.formula,
         "cif_filename": download.path.name,
         "source": ELASTICITY_SOURCE,
         "status": status,
         "error": error,
-        "cij_basis": "ieee_format" if ieee_format else ("raw" if raw else ""),
+        "cij_basis": cij_basis,
         "units": {
             "elastic_tensor": "GPa",
             "bulk_modulus": "GPa",
@@ -318,9 +545,36 @@ def _build_elasticity_payload(
         "shear_modulus": _modulus_dict(doc, "shear_modulus") if doc is not None else None,
         "poisson_ratio": _json_scalar(_value(doc, "homogeneous_poisson")) if doc is not None else None,
         "universal_anisotropy": _json_scalar(_value(doc, "universal_anisotropy")) if doc is not None else None,
-        "fitting_method": _json_scalar(_value(doc, "fitting_method")) if doc is not None else None,
-        "state": _json_scalar(_value(doc, "state")) if doc is not None else None,
+        "fitting_method": fitting_method,
+        "state": state,
+        "provenance": _build_elasticity_provenance(
+            download,
+            status=status,
+            cij_basis=cij_basis,
+            fitting_method=fitting_method,
+            state=state,
+            numerical=numerical,
+        ),
     }
+    # Downstream CIF2Peaks contract: flat 6x6 + explicit frame (same as ieee when present).
+    if numerical and stiffness is not None:
+        payload["stiffness_GPa"] = stiffness
+        payload["cif2peaks"] = {
+            "schema": PHASESCOUT_ELASTICITY_SCHEMA,
+            "stiffness_GPa": stiffness,
+            "coordinate_frame": CIF2PEAKS_COORDINATE_FRAME,
+            "paired_cif": download.path.name,
+            "auto_load_hint": (
+                "Place this JSON next to the CIF (stem_elasticity.json). "
+                "CIF2Peaks auto-loads it when you add the CIF folder."
+            ),
+        }
+        if isinstance(payload["provenance"], dict):
+            payload["provenance"] = {
+                **payload["provenance"],
+                "coordinate_frame": CIF2PEAKS_COORDINATE_FRAME,
+            }
+    return payload
 
 
 def _payload_to_csv_row(payload: dict[str, object], json_path: Path) -> dict[str, object]:
@@ -334,12 +588,21 @@ def _payload_to_csv_row(payload: dict[str, object], json_path: Path) -> dict[str
     bulk = bulk if isinstance(bulk, dict) else {}
     shear = payload.get("shear_modulus")
     shear = shear if isinstance(shear, dict) else {}
+    prov = payload.get("provenance")
+    prov = prov if isinstance(prov, dict) else {}
 
     row: dict[str, object] = {
         "material_id": payload.get("material_id", ""),
         "formula": payload.get("formula", ""),
         "cif_filename": payload.get("cif_filename", ""),
         "status": payload.get("status", ""),
+        "provider": prov.get("provider", "Materials Project"),
+        "nature_of_data": prov.get("nature_of_data", ""),
+        "numerical_cij": prov.get("numerical_cij", ""),
+        "methodology_url": prov.get("methodology_url", ELASTICITY_METHODOLOGY_URL),
+        "mp_material_url": prov.get("mp_material_url", ""),
+        "paired_cif": prov.get("paired_cif", payload.get("cif_filename", "")),
+        "disclaimer_short": ELASTICITY_DISCLAIMER_SHORT,
         "cij_basis": payload.get("cij_basis", ""),
         **_flatten_cij(matrix),  # type: ignore[arg-type]
         "K_Voigt_GPa": _csv_value(bulk.get("voigt")),
@@ -356,6 +619,61 @@ def _payload_to_csv_row(payload: dict[str, object], json_path: Path) -> dict[str
         "error": payload.get("error", ""),
     }
     return row
+
+
+def write_cij_provenance_readme(output_dir: Path, *, n_ok: int, n_missing: int) -> Path:
+    """Batch-level Cij provenance note (anti black-box)."""
+
+    path = output_dir / "Cij_PROVENANCE.txt"
+    text = f"""Cij / elasticity provenance (PhaseScout)
+========================================
+
+Provider: Materials Project (materials/elasticity API)
+Nature:   DFT-calculated elastic tensors (NOT experimental handbook Cij)
+Docs:     {ELASTICITY_METHODOLOGY_URL}
+
+This batch
+----------
+Numerical Cij (status=ok): {n_ok}
+Missing / no tensor:       {n_missing}
+
+Where to look
+-------------
+- Per-material JSON:  {{cif_stem}}_elasticity.json  → field "provenance"
+- Table:              elasticity_index.csv           → nature_of_data, methodology_url, mp_material_url
+- Literature hints:   elasticity_web_search.csv / elasticity_web_hits.jsonl
+                      (OpenAlex/web ONLY when MP has no tensor; numerical_cij=false)
+
+Orientation
+-----------
+Preferred tensor basis: ieee_format (GPa), consistent with MP conventional standard cell.
+PhaseScout CIF download defaults to conventional_unit_cell=True.
+Downstream label: materials_project_ieee_conventional
+
+Downstream: CIF2Peaks
+---------------------
+Drag this folder into CIF2Peaks (or `cif2peaks <this_folder> -o out.xlsx`).
+CIF2Peaks auto-loads each {{stem}}_elasticity.json next to the CIF
+(status=ok only) and fills hkl-normal Young's modulus columns.
+Machine map: cif2peaks_manifest.json
+No need to paste 6x6 matrices by hand.
+Disable with CIF2Peaks flag: --no-auto-elastic
+Some MP tensors may fail positive-definite checks in CIF2Peaks (invalid_elastic_constants);
+peak tables still export; moduli stay blank for those phases.
+
+How to cite / check
+-------------------
+1. Record material_id (mp-xxxx) and the paired CIF filename.
+2. Open mp_material_url from the JSON provenance or elasticity_index.csv.
+3. Read MP elasticity methodology page above.
+4. Do NOT treat literature hits as extracted Cij matrices.
+
+Disclaimer
+----------
+{ELASTICITY_DISCLAIMER}
+"""
+    path.write_text(text, encoding="utf-8")
+    return path
 
 
 class MaterialsProjectService:
@@ -459,10 +777,14 @@ class MaterialsProjectService:
         output_dir: Path,
         conventional_unit_cell: bool = True,
         include_elasticity: bool = False,
+        name_meta: dict[str, CifNameMeta] | None = None,
     ) -> list[DownloadResult]:
         output_dir.mkdir(parents=True, exist_ok=True)
         results: list[DownloadResult] = []
         successful_downloads: list[SuccessfulCif] = []
+        meta_by_id: dict[str, CifNameMeta] = {
+            str(k).strip().lower(): v for k, v in (name_meta or {}).items()
+        }
 
         with MPRester(self.api_key) as mpr:
             for material_id in material_ids:
@@ -480,12 +802,47 @@ class MaterialsProjectService:
                         results.append(DownloadResult(material_id=mpid, ok=False, error="No structure returned."))
                         continue
 
-                    formula = sanitize_filename_part(structure.composition.reduced_formula, "structure")
-                    filename = f"{mpid}_{formula}.cif"
+                    meta = meta_by_id.get(mpid, CifNameMeta())
+                    structure_formula = str(structure.composition.reduced_formula or "")
+                    formula = meta.formula or structure_formula or "structure"
+                    formula_safe = sanitize_filename_part(formula, "structure")
+
+                    sg_symbol = meta.space_group
+                    sg_number = meta.space_group_number
+                    if not sg_symbol and sg_number is None:
+                        sg_symbol, sg_number = _spacegroup_from_structure(structure)
+
+                    st = (
+                        StructureTypeResult(
+                            meta.structure_type, meta.structure_type_rule
+                        )
+                        if meta.structure_type
+                        else infer_structure_type_detailed(formula, sg_symbol, sg_number)
+                    )
+                    if not st.type:
+                        st = infer_structure_type_detailed(formula, sg_symbol, sg_number)
+                    filename = build_cif_filename(
+                        mpid,
+                        formula_safe,
+                        space_group=sg_symbol,
+                        space_group_number=sg_number,
+                        energy_above_hull=meta.energy_above_hull,
+                        is_stable=meta.is_stable,
+                        structure_type=st.type,
+                    )
                     path = output_dir / filename
                     structure.to(fmt="cif", filename=str(path))
-                    results.append(DownloadResult(material_id=mpid, ok=True, path=path))
-                    successful_downloads.append(SuccessfulCif(material_id=mpid, formula=formula, path=path))
+                    results.append(
+                        DownloadResult(
+                            material_id=mpid,
+                            ok=True,
+                            path=path,
+                            formula=formula_safe,
+                        )
+                    )
+                    successful_downloads.append(
+                        SuccessfulCif(material_id=mpid, formula=formula_safe, path=path)
+                    )
                 except Exception as exc:  # keep batch downloads going
                     results.append(DownloadResult(material_id=mpid, ok=False, error=str(exc)))
 
@@ -497,6 +854,8 @@ class MaterialsProjectService:
                         elasticity_found=artifacts[result.material_id].found,
                         elasticity_path=artifacts[result.material_id].path,
                         elasticity_error=artifacts[result.material_id].error,
+                        elasticity_status=artifacts[result.material_id].status,
+                        elasticity_source=artifacts[result.material_id].source,
                     )
                     if result.ok and result.material_id in artifacts
                     else result
@@ -560,6 +919,8 @@ class MaterialsProjectService:
                 found=status == "ok",
                 path=json_path,
                 error=error,
+                status=status,
+                source="materials_project",
             )
 
         index_path = output_dir / "elasticity_index.csv"
@@ -568,6 +929,13 @@ class MaterialsProjectService:
             "formula",
             "cif_filename",
             "status",
+            "provider",
+            "nature_of_data",
+            "numerical_cij",
+            "methodology_url",
+            "mp_material_url",
+            "paired_cif",
+            "disclaimer_short",
             "cij_basis",
             *CIJ_LABELS,
             "K_Voigt_GPa",
@@ -588,4 +956,48 @@ class MaterialsProjectService:
             writer.writeheader()
             writer.writerows(csv_rows)
 
+        n_ok = sum(1 for a in artifacts.values() if a.found)
+        n_missing = len(artifacts) - n_ok
+        write_cij_provenance_readme(output_dir, n_ok=n_ok, n_missing=n_missing)
+        write_cif2peaks_manifest(output_dir, downloads, artifacts)
+
         return artifacts
+
+
+def write_cif2peaks_manifest(
+    output_dir: Path,
+    downloads: list[SuccessfulCif],
+    artifacts: dict[str, ElasticityArtifact],
+) -> Path:
+    """Machine-readable CIF↔Cij map for CIF2Peaks / agents."""
+
+    rows: list[dict[str, object]] = []
+    for download in downloads:
+        art = artifacts.get(download.material_id)
+        numerical = bool(art and art.found)
+        json_name = art.path.name if art and art.path else f"{download.path.stem}_elasticity.json"
+        rows.append(
+            {
+                "material_id": download.material_id,
+                "cif": download.path.name,
+                "elasticity_json": json_name,
+                "numerical_cij": numerical,
+                "elasticity_status": art.status if art else "",
+                "formula": download.formula,
+            }
+        )
+    path = output_dir / "cif2peaks_manifest.json"
+    path.write_text(
+        json.dumps(
+            {
+                "schema": "phasescout_cif2peaks_manifest_v1",
+                "pairing": "Match CIF to {stem}_elasticity.json in the same folder; "
+                "CIF2Peaks auto-loads when you open this directory.",
+                "items": rows,
+            },
+            indent=2,
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    return path

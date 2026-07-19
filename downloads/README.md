@@ -13,5 +13,14 @@ downloads/
     phase_index.csv
     query_summary.txt
     run_manifest.json
-    mp-xxxx_Formula.cif
+    mp-xxxx_Formula_sgN_Symbol_ehull…[_stable].cif
 ```
+
+CIF naming (scheme B, mp-id first):
+
+```text
+mp-134_Al_sg225_Fm-3m_ehull0_stable.cif
+mp-1183144_Al_sg194_P6_3_mmc_ehull0p010.cif
+```
+
+Existing older files may still be `mp-xxxx_Formula.cif`; they are not auto-renamed.

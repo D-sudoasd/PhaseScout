@@ -106,6 +106,8 @@ class ElasticityExportTests(unittest.TestCase):
                 include_elasticity=True,
             )
 
+            # Structure-only path (no name_meta): formula + SG from structure when available.
+            # FakeStructure has no SG analyzer → mp-id_formula.cif
             self.assertTrue((Path(tmp) / "mp-149_Si.cif").exists())
             self.assertTrue((Path(tmp) / "mp-404_Missing.cif").exists())
             self.assertEqual([result.ok for result in results], [True, True])
@@ -137,10 +139,35 @@ class ElasticityExportTests(unittest.TestCase):
             self.assertEqual(payload["source"], "Materials Project materials/elasticity")
             self.assertEqual(payload["units"]["elastic_tensor"], "GPa")
             self.assertEqual(payload["elastic_tensor"]["ieee_format"][0][0], 165.7)
+            prov = payload["provenance"]
+            self.assertEqual(prov["provider"], "Materials Project")
+            self.assertEqual(prov["nature_of_data"], "DFT_calculated")
+            self.assertTrue(prov["numerical_cij"])
+            self.assertTrue(prov["not_experimental"])
+            self.assertIn("methodology_url", prov)
+            self.assertIn("mp-149", prov["mp_material_url"])
+            self.assertEqual(payload["schema"], "phasescout_elasticity_v1")
+            self.assertIn("stiffness_GPa", payload)
+            self.assertEqual(
+                payload["cif2peaks"]["coordinate_frame"],
+                "materials_project_ieee_conventional",
+            )
+            self.assertEqual(rows[0]["nature_of_data"], "DFT_calculated")
+            self.assertEqual(rows[0]["provider"], "Materials Project")
+            self.assertTrue((Path(tmp) / "Cij_PROVENANCE.txt").is_file())
+            self.assertIn("CIF2Peaks", (Path(tmp) / "Cij_PROVENANCE.txt").read_text(encoding="utf-8"))
+            manifest_path = Path(tmp) / "cif2peaks_manifest.json"
+            self.assertTrue(manifest_path.is_file())
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            self.assertEqual(manifest["schema"], "phasescout_cif2peaks_manifest_v1")
+            self.assertEqual(len(manifest["items"]), 2)
+            self.assertTrue(any(item.get("numerical_cij") for item in manifest["items"]))
 
             missing_payload = json.loads(missing_json.read_text(encoding="utf-8"))
             self.assertEqual(missing_payload["status"], "no_elasticity_data")
             self.assertIsNone(missing_payload["elastic_tensor"])
+            self.assertFalse(missing_payload["provenance"]["numerical_cij"])
+            self.assertEqual(missing_payload["provenance"]["nature_of_data"], "none")
 
 
 if __name__ == "__main__":
