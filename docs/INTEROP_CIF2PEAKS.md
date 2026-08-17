@@ -10,16 +10,16 @@ PhaseScout 在同一文件夹写出 **CIF + `*_elasticity.json`**；CIF2Peaks **
 1. PhaseScout CLI（示例）
    py -3.12 scripts\fetch_possible_phases.py "Ti-Al-V" --mode near_stable --elasticity --yes
 
-2. 打开下载目录 downloads/0N_…/ 或桌面批次文件夹
-   应含: *.cif, *_elasticity.json, elasticity_index.csv,
+2. 下载目录 downloads/0N_…/ 应含: *.cif, *_elasticity.json, elasticity_index.csv,
          Cij_PROVENANCE.txt, cif2peaks_manifest.json
 
-3. CIF2Peaks
-   - GUI: Add folder / 拖文件夹
-   - CLI: cif2peaks "path\to\folder" -o peaks.xlsx
+3. Agent / CLI（完整表，不要停在 GUI）
+   cwd = CIF2Peaks repo
+   py -3.12 -m cif2peaks "path\to\folder" -o "path\to\folder\cif2peaks_complete.xlsx"
    （默认 --auto-elastic）
 
-4. 列表中带 [Cij] 的相已自动加载数值矩阵
+4. 工作簿含 工作峰表 / Structure / Overlap(多相) / Combined Peaks / Elastic Constants
+   有 sidecar 的相自动填 hkl 法向模量；没有 Cij 的相标 no_elastic_constants，不编造 6×6
 ```
 
 ## 配对规则（多相准确对应）

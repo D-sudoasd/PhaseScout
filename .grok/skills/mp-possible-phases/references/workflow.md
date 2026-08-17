@@ -40,6 +40,9 @@ download (± --elasticity)
 if elasticity and web_hints
   → point to elasticity_web_search.csv / web_hits.jsonl
   → do not claim numerical Cij for those rows
+CIF2Peaks CLI on the same batch folder
+  → <batch>/cif2peaks_complete.xlsx
+  → do not open the GUI; do not invent missing Cij
 ```
 
 ## 5. Failure handling
