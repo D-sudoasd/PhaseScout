@@ -23,6 +23,18 @@ A GUI and CLI toolkit for subsystem expansion, candidate-phase queries, and CIF 
 
 Materials Project 结构通常为 DFT 弛豫结构，不能自动视为实验 CIF。弹性文献线索与数值 `Cij` 分别保存；查询结果需要核对物相、晶胞、空间群和来源后使用。
 
+## 原理示意 / Principle schematic
+
+<p align="center">
+  <img src="assets/readme/principle.png" width="100%" alt="化学子体系扩展、DFT 候选结构与弹性来源区别 — conceptual schematic / 概念示意图">
+</p>
+
+*概念示意：化学体系展开为子体系以检索 DFT 候选结构；CIF 与来源索引为后续核对提供参考。MP 弹性数值与文献线索分别保存，缺失值不填造；不代表实验相鉴定。*
+
+*Conceptual schematic: chemical subsystems support DFT candidate retrieval; CIF files and source indexes provide traceable references. MP numerical elasticity and literature hints remain distinct, with missing values left missing; this is not experimental phase identification.*
+
+[查看完整示意图 / View full-size schematic](assets/readme/principle.png)
+
 ## Features
 
 | Path | Entry |
