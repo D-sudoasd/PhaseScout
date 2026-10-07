@@ -1,0 +1,6 @@
+flowchart TD
+  A[牌号、组成或化学体系] --> B[解析元素并展开子体系]
+  B --> C[查询 Materials Project 候选]
+  C --> D[CIF 与 phase_index.csv]
+  C --> E[可选弹性数据或文献线索]
+  E --> F[记录数值来源与证据等级]

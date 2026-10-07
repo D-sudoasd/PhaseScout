@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/readme/hero.svg" width="100%" alt="PhaseScout: scout possible phases and harvest CIF cards from Materials Project.">
+</p>
+
 # PhaseScout
 
 **从合金牌号或化学体系检索 Materials Project 候选结构，下载 CIF 并保留来源索引。**
@@ -10,14 +14,12 @@ A GUI and CLI toolkit for subsystem expansion, candidate-phase queries, and CIF 
 
 [![MIT](https://img.shields.io/badge/License-MIT-455A64)](LICENSE) [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-3776AB)](pyproject.toml)
 
-```mermaid
-flowchart TD
-  A[牌号、组成或化学体系] --> B[解析元素并展开子体系]
-  B --> C[查询 Materials Project 候选]
-  C --> D[CIF 与 phase_index.csv]
-  C --> E[可选弹性数据或文献线索]
-  E --> F[记录数值来源与证据等级]
-```
+<picture>
+  <source media="(max-width: 600px)" srcset="assets/readme/diagrams/workflow-readme-md-1-mobile.svg">
+  <img src="assets/readme/diagrams/workflow-readme-md-1.svg" width="100%" alt="PhaseScout — workflow schematic / 流程示意图">
+</picture>
+
+<sub>[Editable diagram source / 可编辑图源](assets/readme/diagrams/workflow-readme-md-1.mmd)</sub>
 
 Materials Project 结构通常为 DFT 弛豫结构，不能自动视为实验 CIF。弹性文献线索与数值 `Cij` 分别保存；查询结果需要核对物相、晶胞、空间群和来源后使用。
 
